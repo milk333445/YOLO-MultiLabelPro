@@ -1,0 +1,29 @@
+version: '3'
+services:
+  ATL:
+    image: nexuni/va:amd64.v1
+    volumes:
+      - ~/.ssh:/root/.ssh
+      - /dev:/dev
+      - /etc/localtime:/etc/localtime
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # - /usr/local/cuda/lib64:/usr/local/cuda/lib64
+      - /home/nexuni/max:/usr/src/app
+    privileged: true
+    container_name: ATL
+    network_mode: "host"
+    restart: unless-stopped
+    command: 
+      - bash
+      - -c
+      - |
+          echo "export DISPLAY=:0" >> /root/.bashrc
+          tail -F anything
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]    
+    environment:
+      - QT_X11_NO_MITSHM=1
