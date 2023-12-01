@@ -57,6 +57,7 @@ key_actions_normal:
   115: 'switch_next' # s
   87: 'switch_prev' # W
   83: 'switch_next' # S
+  9: 'switch_next_bbox' # tab
 ```
 - Here are some explanations:
   - Mouse Actions:
@@ -70,23 +71,25 @@ key_actions_normal:
     - A or a : Press A or a to navigate to the previous image.
     - W or w : Press W or w to switch to the previous annotation class.
     - S or s : Press S or s to switch to the next annotation class.
+    - tab : Press tab to choose the bbox that you want to delete(press b).
 - Use Case: Annotating an Image of an Apple:
   1. Launch the YOLOAutoLabeler tool.
   2. Load your YoloV5 model (if available) by pressing the Space key to enable annotation.
   3. Open an image for annotation that contains an apple.
-  4. Left-click and drag the mouse to draw a bounding box around the apple. You can adjust the size and position of the bounding box to accurately enclose the apple.
-  5. Right-click to cancel a bounding box if you accidentally marked the wrong object or location.
-  6. When you are satisfied with the annotation, press the Enter key to save it.
-  7. If you have multiple object classes to annotate, press the W or S keys to switch to a different annotation class.
-  8. Repeat steps 4 to 6 until you have completed annotating the image.
-  9. If you need to skip annotating the current image, press the "D" key.
-  10. Press the "A" key to navigate to the previous image and repeat steps 4 to 8 until all images are annotated.
-  11. When you have finished annotating all images, press the Esc key to exit the tool. Your YoloV5 dataset now contains accurate annotation information and can be used for model training.
+  4. if you want to delete the bbox, you can press tab to selecte the bbox and press b to delete it.
+  5. Left-click and drag the mouse to draw a bounding box around the apple. You can adjust the size and position of the bounding box to accurately enclose the apple.
+  6. Right-click to cancel a bounding box if you accidentally marked the wrong object or location.
+  7. When you are satisfied with the annotation, press the Enter key to save it.
+  8. If you have multiple object classes to annotate, press the W or S keys to switch to a different annotation class.
+  9. Repeat steps 4 to 6 until you have completed annotating the image.
+  10. If you need to skip annotating the current image, press the "D" key.
+  11. Press the "A" key to navigate to the previous image and repeat steps 4 to 8 until all images are annotated.
+  12. When you have finished annotating all images, press the Esc key to exit the tool. Your YoloV5 dataset now contains accurate annotation information and can be used for model training.
 ### Launching the Main Program and Setting Parameters
 ```python=
-python main.py --mode [choose mode(normal、LPR)] --last_time_num [last image number] --weights [model weights file path] --source [image folder path] --imagesz [image width] [image height] --conf_thres [object confidence threshold] --iou_thres [NMS IOU threshold] --max_det [maximum detections per image] --store [label storage path]
+python main.py --mode [choose mode(normal、LPR)] --last_time_num [last image number] --weights [model weights file path] --source [image folder path] --imagesz [image width] [image height] --conf_thres [object confidence threshold] --iou_thres [NMS IOU threshold] --max_det [maximum detections per image] --store [label storage path] --images_store [images that have been labeled]
 ```
-- You don't need to configure all parameters every time. Here are detailed explanations of some important parameters such as mode, last_time_num, weights, source, and store:
+- You don't need to configure all parameters every time. Here are detailed explanations of some important parameters such as mode, last_time_num, weights, source,  store and images_store:
   - mode (Mode):
     - normal (Normal Mode): This is the general mode for multi-class labeling where you can quickly switch object categories using the keyboard.
     - LPR (License Plate Mode): This mode is designed for annotating license plate characters (default is 3 English characters + 4 numeric characters). In this mode, you will need to input all labels via the terminal.
@@ -98,6 +101,8 @@ python main.py --mode [choose mode(normal、LPR)] --last_time_num [last image nu
     - This is a mandatory parameter that specifies the path to the folder containing the images you want to label. 
   - store (Label Storage Path):
     - This is also a mandatory parameter that specifies where you want to save the label information.
+  - images_store
+    - if you want to make store the images(because if you skip the images, the labels file won't match the original images file), use this parameter. 
    
 Using these parameters, you can easily configure the main program to label your image dataset and perform labeling in different modes according to your needs.
 
@@ -203,9 +208,9 @@ key_actions_obb:
 
 ### Launching the Main Program and Setting Parameters
 ```python=
-python main.py --mode [choose mode(OBB)] --last_time_num [last image number] --weights [model weights file path] --source [image folder path] --imagesz [image width] [image height] --conf_thres [object confidence threshold] --iou_thres [NMS IOU threshold] --max_det [maximum detections per image] --store [label storage path]
+python main.py --mode [choose mode(OBB)] --last_time_num [last image number] --weights [model weights file path] --source [image folder path] --imagesz [image width] [image height] --conf_thres [object confidence threshold] --iou_thres [NMS IOU threshold] --max_det [maximum detections per image] --store [label storage path] --images_store [images that have been labeled]
 ```
-- You don't need to configure all parameters every time. Here are detailed explanations of some important parameters such as mode, last_time_num, weights, source, and store:
+- You don't need to configure all parameters every time. Here are detailed explanations of some important parameters such as mode, last_time_num, weights, source, store, images_store:
   - mode (Mode):
     - OBB (Normal Mode): This is the general mode for multi-class labeling where you can quickly switch object categories using the keyboard.
   - last_time_num (Last Image Number):
@@ -216,6 +221,8 @@ python main.py --mode [choose mode(OBB)] --last_time_num [last image number] --w
     - This is a mandatory parameter that specifies the path to the folder containing the images you want to label. 
   - store (Label Storage Path):
     - This is also a mandatory parameter that specifies where you want to save the label information.
-   
+  - images_store
+    - if you want to make store the images(because if you skip the images, the labels file won't match the original images file), use this parameter. 
+  
 Using these parameters, you can easily configure the main program to label your image dataset and perform labeling in different modes according to your needs.
 
