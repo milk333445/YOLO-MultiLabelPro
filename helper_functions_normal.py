@@ -13,6 +13,7 @@ from autolabel_config import ConfigManager
 import re
 import time
 import torchvision
+import shutil
 
 config_manager = ConfigManager()
 conf = config_manager.get_config()
@@ -73,19 +74,19 @@ def handle_mouse_move_normal(x, y, drawing, param):
             for i in range(len(param[2])):
                 cv2.rectangle(tmp_im, (param[0][i][0], param[0][i][1]), 
                                 (param[0][i][2], param[0][i][3]), (clr[param[2][i]]), 2)
-                DrawText(tmp_im, obj[param[2][i]], font_thickness=2, font_scale=1, pos='tl', axis= (param[0][i][0], param[0][i][1]))
+                DrawText(tmp_im, obj[param[2][i]], font_thickness=1, font_scale=0.5, pos='tl', axis= (param[0][i][0], param[0][i][1]))
                               
         cv2.rectangle(tmp_im, (param[0][-1][0], param[0][-1][1]), 
                         (x, y), (clr[param[3]]), 2)
         cv2.putText(tmp_im, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-        DrawText(tmp_im, obj[param[3]], font_thickness=2, font_scale=1, pos='tl', axis= (param[0][-1][0], param[0][-1][1]))
+        DrawText(tmp_im, obj[param[3]], font_thickness=1, font_scale=0.5, pos='tl', axis= (param[0][-1][0], param[0][-1][1]))
         cv2.circle(tmp_im, (x, y), 10, (clr[param[3]]), 2)
     else:
         if len(param[2]) > 0:
             for i in range(len(param[2])):
                 cv2.rectangle(tmp_im, (param[0][i][0], param[0][i][1]), 
                                 (param[0][i][2], param[0][i][3]), (clr[param[2][i]]), 2)
-                DrawText(tmp_im, obj[param[2][i]], font_thickness=2, font_scale=1, pos='tl', axis= (param[0][i][0], param[0][i][1]))
+                DrawText(tmp_im, obj[param[2][i]], font_thickness=1, font_scale=0.5, pos='tl', axis= (param[0][i][0], param[0][i][1]))
                 
         cv2.line(tmp_im, (x, 0), (x, tmp_im.shape[0]), (0, 0, 0), 1)
         cv2.line(tmp_im, (0, y), (tmp_im.shape[1], y), (0, 0, 0), 1)
@@ -164,10 +165,36 @@ def handle_delete_buttom_up(param): # flag=1: normal, flag=2: LPR
         cv2.rectangle(tmp_im, (param[0][i][0], param[0][i][1]), (param[0][i][2], param[0][i][3]), (clr[param[2][i]]), 2)
     return tmp_im
 
+
+def handle_delete_speccific_bbox(lst_a, count2):
+    selected_bbox = count2 % len(lst_a[0])
+    lst_a[0].pop(selected_bbox)
+    lst_a[2].pop(selected_bbox)
+    print(f'delete bbox {selected_bbox}')
+    tmp_im = copy.deepcopy(lst_a[1])
+    for i in range(len(lst_a[2])):
+        cv2.rectangle(tmp_im, (lst_a[0][i][0], lst_a[0][i][1]), (lst_a[0][i][2], lst_a[0][i][3]), (clr[lst_a[2][i]]), 2)
+        DrawText(tmp_im, obj[lst_a[2][i]], font_thickness=1, font_scale=0.5, pos='tl', axis=(lst_a[0][i][0], lst_a[0][i][1]))
+    return tmp_im
+
+def handle_delete_single_bbox(lst_a, selected_bbox, mode='normal'):
+    lst_a[0].pop(selected_bbox)
+    lst_a[2].pop(selected_bbox)
+    print(f'delete bbox {selected_bbox}')
+    
+    tmp_im = copy.deepcopy(lst_a[1])
+    for i in range(len(lst_a[2])):
+        cv2.rectangle(tmp_im, (lst_a[0][i][0], lst_a[0][i][1]), (lst_a[0][i][2], lst_a[0][i][3]), (clr[lst_a[2][i]]), 2)
+        if mode == 'normal':
+            DrawText(tmp_im, obj[lst_a[2][i]], font_thickness=1, font_scale=0.5, pos='tl', axis=(lst_a[0][i][0], lst_a[0][i][1]))
+    return tmp_im
+
+
 def handle_delete_buttom_up_normal(param):
     if param[0] and param[2]:
         param[0].pop()
         param[2].pop()
+        print('current label: ', param[2])
     else:
         print("No more items to undo.")
     
@@ -178,7 +205,7 @@ def handle_delete_buttom_up_normal(param):
     
     for i in range(len(param[2])):
         cv2.rectangle(tmp_im, (param[0][i][0], param[0][i][1]), (param[0][i][2], param[0][i][3]), (clr[param[2][i]]), 2)
-        DrawText(tmp_im, obj[param[2][i]], font_thickness=2, font_scale=1, pos='tl', axis= (param[0][i][0], param[0][i][1]))
+        DrawText(tmp_im, obj[param[2][i]], font_thickness=1, font_scale=0.5, pos='tl', axis= (param[0][i][0], param[0][i][1]))
     return tmp_im
         
 def initialize_parameters(last_time_num, source):
@@ -236,20 +263,22 @@ def predict_image(im, model, conf_thres, iou_thres, max_det, im0_shape):
 def draw_prediction_on_image(pred, im0, obj, clr):
     img_tmp = copy.deepcopy(im0)
     lst = []
-    
+    lst_real_coords = []
+
     for i in range(len(pred[0])):
         x = int(pred[0][i][0])
         y = int(pred[0][i][1])
         w = int(pred[0][i][2]) - int(pred[0][i][0])
         h = int(pred[0][i][3]) - int(pred[0][i][1])
         classes = int(pred[0][i][5])
-        if classes != 0:
-            continue
+        #if classes != 0:
+            #continue
         cv2.rectangle(img_tmp, (int(pred[0][i][0]), int(pred[0][i][1])), (int(pred[0][i][2]), int(pred[0][i][3])), clr[classes], 3, cv2.LINE_AA)
-        DrawText(img_tmp, obj[classes], font_thickness=2, font_scale=1, pos='tl', axis=(int(pred[0][i][0]), int(pred[0][i][1])))
+        DrawText(img_tmp, obj[classes], font_thickness=1, font_scale=0.6, pos='tl', axis=(int(pred[0][i][0]), int(pred[0][i][1])))
+        lst_real_coords.append([int(pred[0][i][0]), int(pred[0][i][1]), int(pred[0][i][2]), int(pred[0][i][3]), classes])
         lst_i = location(x, y, w, h, im0.shape[1], im0.shape[0], classes)
         lst.append(lst_i)
-    return img_tmp, lst
+    return img_tmp, lst, lst_real_coords
 
 def get_plate_string():
     while True:
@@ -272,14 +301,39 @@ def process_image_annotations(lst_a):
         lst.append(lst_i)
     return lst
 
-def save_labels_to_file(lst, save_img):
+def save_labels_to_file(lst, save_img, oritginal_img_path, images_store):
     with open(save_img, 'w+') as f:
         for entry in lst:
             f.write(" ".join(map(str, entry)) + "\n")
     print('Label Saved Successfully')
+    
+    if images_store:
+        if not os.path.exists(images_store):
+            os.makedirs(images_store)
+        shutil.copy2(oritginal_img_path, images_store)
            
 def get_key_action(key):
     return key_actions.get(key, 'invalid key')
+
+
+def update_selected_bbox(lst_a, obj, count2, window_name, mode='normal'):
+    try:
+        bbox = count2 % len(lst_a[0])
+        im_new = copy.deepcopy(lst_a[1])
+        cv2.rectangle(im_new, (lst_a[0][bbox][0], lst_a[0][bbox][1]), (lst_a[0][bbox][2], lst_a[0][bbox][3]), (0, 0, 255), 2) # Draw the selected bounding box in red
+        if mode == 'normal':
+            DrawText(im_new, obj[lst_a[2][bbox]], font_thickness=1, font_scale=0.5, pos='tl', axis=(lst_a[0][bbox][0], lst_a[0][bbox][1])) 
+        
+        for i in range(len(lst_a[0])):
+            if i != bbox:
+                cv2.rectangle(im_new, (lst_a[0][i][0], lst_a[0][i][1]), (lst_a[0][i][2], lst_a[0][i][3]), (clr[lst_a[2][i]]), 2)
+                if mode == 'normal':
+                    DrawText(im_new, obj[lst_a[2][i]], font_thickness=1, font_scale=0.5, pos='tl', axis=(lst_a[0][i][0], lst_a[0][i][1]))
+        cv2.imshow(window_name, im_new)
+    except IndexError:
+        print('Index Error')
+        pass
+    return count2, bbox
 
 def update_label_and_display(action, count, obj, lst_a, window_name):
     try:
@@ -292,7 +346,7 @@ def update_label_and_display(action, count, obj, lst_a, window_name):
         im_new = copy.deepcopy(lst_a[1])
         for i in range(len(lst_a[0])):
             cv2.rectangle(im_new, (lst_a[0][i][0], lst_a[0][i][1]), (lst_a[0][i][2], lst_a[0][i][3]), (clr[lst_a[2][i]]), 2)
-            DrawText(im_new, obj[lst_a[2][i]], font_thickness=2, font_scale=1, pos='tl', axis=(lst_a[0][i][0], lst_a[0][i][1]))
+            DrawText(im_new, obj[lst_a[2][i]], font_thickness=1, font_scale=0.5, pos='tl', axis=(lst_a[0][i][0], lst_a[0][i][1]))
 
         current_category = obj[item]
         info_text = f'current category: {current_category}'

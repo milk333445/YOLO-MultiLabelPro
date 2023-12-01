@@ -13,6 +13,7 @@ from autolabel_config import *
 import re
 from helper_functions_obb import *
 from detection import Detector
+import shutil  
 
 def show_xy_rotated_rect(event, x, y, flags, param):
     global drawing, center_point, rotated_pts, prev_mouse_move
@@ -38,7 +39,6 @@ def show_xy_rotated_rect(event, x, y, flags, param):
             param[0].append(rotated_pts.tolist())
             param[3].append(center_point)
             param[5] = new_obj
-            print('labels', param[5])
             cv2.imshow(param[2], param[1])
             print('save successfully')
             print('Labeling Objects...')
@@ -125,7 +125,7 @@ def show_xy_combined(event, x, y, flags, param):
                 
                 cv2.rectangle(param[1], (new_coords[-1][0], new_coords[-1][1]),
                               (new_coords[-1][2], new_coords[-1][3]), (clr[new_objs[-1]]), 2)
-                DrawText(param[1], obj[new_objs[-1]], font_thickness=2, font_scale=1, pos='tl',
+                DrawText(param[1], obj[new_objs[-1]], font_thickness=1, font_scale=0.3, pos='tl',
                          axis=(new_coords[-1][0], new_coords[-1][1]))
         else:
             
@@ -134,19 +134,21 @@ def show_xy_combined(event, x, y, flags, param):
         cv2.imshow(param[4], tmp_im)
     
 class Statemachine_ATL:
-    def __init__(self, last_time_num=None, obj=None, clr=None, source='./data/images/',
+    def __init__(self, last_time_num=None, obj=None, clr=clr, source='./data/images/',images_store= None,
                  weights='./runs/train/exp3/weights/best.pt', imagesz=(640, 640), conf_thres=0.25, iou_thres=0.45,
                  max_det=1000, store='./data/labels/'):
         self.state = 'initial'
         self.img_count = 0
+        self.images_store = images_store
         self.img_files, self.total_images, self.lst, self.img_tmp = [], 0, None, None
         self.last_time_num, self.source, self.weights = last_time_num, source, weights
         self.imagesz, self.conf_thres, self.iou_thres, self.max_det = imagesz, conf_thres, iou_thres, max_det
         self.store, self.model, self.obj, self.clr = store, None, obj, clr
-        self.window_name, self.save_img, self.detector = None, None, None
+        self.window_name, self.save_img, self.detector, self.original_image, self.lst_real_coords, self.img_path, self.selected_bbox = None, None, None, None, None, None, None
         self.is_lpr, self.is_obbs = False, False
         self.device = '0'
         self.resize_scale = 1
+        
 
     def load_parameters(self):
         self.source, self.img_count = initialize_parameters(self.last_time_num, self.source)
@@ -171,21 +173,21 @@ class Statemachine_ATL:
       
     def run_model_multilabel(self):
         self.load_parameters()
-        while self.img_count < self.total_images:
-            self.load_next_image()
+        while self.img_count <= self.total_images:
+            self.load_current_image()
         cv2.destroyAllWindows()  
     
     def run_without_model(self):
         self.source, self.img_count = initialize_parameters(self.last_time_num, self.source)
         self.img_files, self.total_images = get_image_files(self.source)
-        while self.img_count < self.total_images:
+        while self.img_count <= self.total_images:
             self.load_image_without_model()
         cv2.destroyAllWindows()
     
     def run_obb_model_label(self):
         self.is_obbs = True 
         self.load_parameters_obb()
-        while self.img_count < self.total_images:
+        while self.img_count <= self.total_images:
             self.load_image_obb()
         cv2.destroyAllWindows()
         
@@ -199,20 +201,21 @@ class Statemachine_ATL:
     def run_model_LPR_label(self):
         self.is_lpr = True
         self.load_parameters()
-        while self.img_count < self.total_images:
+        while self.img_count <= self.total_images:
             self.load_image_LPR_label()
         cv2.destroyAllWindows()
     
     def run_without_model_LPR_label(self):
         self.source, self.img_count = initialize_parameters(self.last_time_num, self.source)
         self.img_files, self.total_images = get_image_files(self.source)
-        while self.img_count < self.total_images:
+        while self.img_count <= self.total_images:
             self.load_image_without_model_LPR_label()
         cv2.destroyAllWindows()
     
     def load_image_obb(self):
         image_path, self.window_name, self.save_img = get_image_path_and_name(self.source, self.img_files, self.img_count, self.store)
         print('Current Image Path: ', image_path)
+        self.img_path = image_path
         pred, img, img0, self.resize_scale, h, w = process_image_with_mdoel(self.model, self.device, image_path, self.imagesz, self.conf_thres, self.iou_thres)
         self.img_tmp, self.lst = visualize_results(self.model, pred, img, img0, self.window_name, self.resize_scale)
         action = get_key_action_obb(cv2.waitKey(0))
@@ -239,6 +242,10 @@ class Statemachine_ATL:
                         category = self.obj[lst_a[5][i]]
                         line = ' '.join(scaled_coords) + ' ' + category + ' 0'
                         file.write(line + '\n')
+                if self.images_store:
+                    if not os.path.exists(self.images_store):
+                        os.makedirs(self.images_store)
+                    shutil.copy2(self.img_path, self.images_store)
                 print('save successfully')
                 self.img_count += 1
                 cv2.destroyAllWindows()
@@ -308,8 +315,8 @@ class Statemachine_ATL:
             if selected_edge:
                 # get the original image
                 self.img_tmp = copy.deepcopy(im0)
-                lst_a[1] = self.img_tmp
                 self.img_tmp = draw_selected_edge(lst_a, selected_edge)
+                lst_a[1] = self.img_tmp
             cv2.imshow(lst_a[2], self.img_tmp)
                 
     def process_key_input(self, action):
@@ -318,9 +325,10 @@ class Statemachine_ATL:
         elif self.state == 'initial':
             if action == 'save':
                 if self.is_obbs:
-                    self.save_labels_obb(self.lst, self.save_img)
+                    self.save_labels_obb(self.lst, self.save_img, self.img_path, self.images_store)
                 else:
-                    self.save_labels(self.lst, self.save_img)
+                    self.save_labels(self.lst, self.save_img, self.img_path, self.images_store)
+                
                 self.load_next_image()
             elif action == 'modify':
                 if self.is_lpr:
@@ -337,14 +345,21 @@ class Statemachine_ATL:
                 cv2.destroyAllWindows()
                 self.load_previous_image()
     
-    def save_labels(self, lst, save_img):
+    def save_labels(self, lst, save_img, original_img_path, images_store=None):
         with open(save_img, 'w+') as f:
             for entry in lst:
                 f.write(" ".join(map(str, entry)) + "\n")
+         
+        if images_store:
+            if not os.path.exists(images_store):
+                os.makedirs(images_store)
+            shutil.copy2(original_img_path, images_store)
+            pass
+        
         cv2.destroyAllWindows()
         print('Label Saved Successfully')
 
-    def save_labels_obb(self, lst, save_img):
+    def save_labels_obb(self, lst, save_img, original_img_path, images_store=None):
         with open(save_img, 'w+') as f:
             for item in lst:
                 poly_coords = item[:8]
@@ -352,27 +367,47 @@ class Statemachine_ATL:
                 coords = [str(int(x)) for x in poly_coords]
                 line = ' '.join(coords) + ' ' + label + ' 0'
                 f.write(line + '\n')
+                
+        if images_store:
+            if not os.path.exists(images_store):
+                os.makedirs(images_store)
+            shutil.copy2(original_img_path, images_store)
+            
+            
         print(f'annotations saved to {save_img}')
 
     def modify_images(self):
         lst_obj = []
+        if self.original_image is not None:
+            self.img_tmp = copy.deepcopy(self.original_image)
+            self.img_tmp, self.resize_scale = resize_to_fit_screen(self.img_tmp)
         im0 = copy.deepcopy(self.img_tmp)
         lst_a = [[], self.img_tmp, lst_obj, 0, self.window_name, 'normal']
+        
+        if self.lst_real_coords is not None:
+            lst_a[0].extend(item[:4] for item in self.lst_real_coords)
+            lst_a[2].extend(item[4] for item in self.lst_real_coords)
+            for i , coord in enumerate(lst_a[0]):
+                cv2.rectangle(self.img_tmp, (coord[0], coord[1]), (coord[2], coord[3]), (clr[lst_a[2][i]]), 2)
+                DrawText(self.img_tmp, obj[lst_a[2][i]], font_thickness=1, font_scale=0.2, pos='tl',)   
+        
         cv2.imshow(self.window_name, self.img_tmp)
         cv2.setMouseCallback(self.window_name, show_xy_combined, lst_a)
         count = 0
+        count2 = 0
         while True:
             key = cv2.waitKey(0)
             action = get_key_action(key)
             if action == 'save':
                 lst = process_image_annotations(lst_a)
-                self.save_labels(lst, self.save_img)
+                self.save_labels(lst, self.save_img, self.img_path, self.images_store)
                 self.img_count += 1
                 cv2.destroyAllWindows()
                 break
             elif action in ['switch_next', 'switch_prev']:
                 lst_a[1] = copy.deepcopy(im0)
                 count = update_label_and_display(action, count, self.obj, lst_a, self.window_name)
+            
             elif action == 'pass':
                 self.img_count += 1
                 cv2.destroyAllWindows()
@@ -385,50 +420,53 @@ class Statemachine_ATL:
                 self.img_count = max(0, self.img_count - 1)
                 cv2.destroyAllWindows()
                 break
+            
+            elif action == 'switch_next_bbox' and lst_a[0]:
+                count2 += 1
+                count2, self.selected_bbox = update_selected_bbox(lst_a, obj, count2, self.window_name)
+            
+            
             elif action == 'delete':
                 lst_a[1] = copy.deepcopy(im0)
-                self.img_tmp = handle_delete_buttom_up_normal(lst_a)
+                if self.selected_bbox is not None:
+                    self.img_tmp = handle_delete_single_bbox(lst_a, self.selected_bbox)
+                    self.selected_bbox = None
+                    
+                else:
+                    self.img_tmp = handle_delete_buttom_up_normal(lst_a)
                 cv2.imshow(self.window_name, self.img_tmp)
             else:
                 print('Input error. Please re-enter.')
 
-    def handle_action_in_modify_images(self, action, lst_a, save_img):
-        if action == 'save':
-            lst = process_image_annotations(lst_a)
-            save_labels_to_file(lst, save_img)
-            self.img_count += 1
-            cv2.destroyAllWindows()
-        elif action == 'pass':
-            self.img_count += 1
-            cv2.destroyAllWindows()
-        elif action == 'exit':
-            self.exit_program()
-        elif action == 'previous':
-            self.img_count = max(0, self.img_count - 1)
-            cv2.destroyAllWindows()
 
     def load_image_common(self, increment):
-        self.img_count = max(0, self.img_count + increment)
+        self.img_count = max(0, self.img_count + increment) 
         print('Current image count:', self.img_count + 1)
         img_path, self.window_name, self.save_img = get_image_path_and_name(
             self.source, self.img_files, self.img_count, self.store)
+        self.img_path = img_path
         print('Current Image Path: ', img_path)
         cv2.destroyAllWindows()
         im0 = cv2.imread(img_path)
+        self.original_image = copy.deepcopy(im0)
         if self.is_obbs:
             pred, img, img0, self.resize_scale, h, w = process_image_with_mdoel(self.model, self.device, image_path, self.imagesz, self.conf_thres, self.iou_thres)
             self.img_tmp, self.lst = visualize_results(self.model, pred, img, img0, self.window_name, self.resize_scale)
             action = get_key_action_obb(cv2.waitKey(0))
         else:
             pred = self.detector.run(im0)
-            self.img_tmp, self.lst = draw_prediction_on_image(pred, im0, self.obj, self.clr)
+            self.img_tmp, self.lst, self.lst_real_coords = draw_prediction_on_image(pred, im0, self.obj, self.clr)
             self.img_tmp, self.resize_scale = resize_to_fit_screen(self.img_tmp)
+            self.lst_real_coords = [[int(float(item) * self.resize_scale) if index < 4 else item for index, item in enumerate(sublist)] for sublist in self.lst_real_coords]
             cv2.imshow(self.window_name, self.img_tmp)
             action = get_key_action(cv2.waitKey(0))
         self.process_key_input(action)
 
     def load_next_image(self):
         self.load_image_common(increment=1)
+
+    def load_current_image(self):
+        self.load_image_common(increment=0)
 
     def load_previous_image(self):
         self.load_image_common(-1)
@@ -442,6 +480,7 @@ class Statemachine_ATL:
         print('Current image count:', self.img_count + 1)
         img_path, self.window_name, self.save_img = get_image_path_and_name(self.source, self.img_files, self.img_count, self.store)
         print('Current Image Path: ', img_path)
+        self.img_path = img_path
         im0 = cv2.imread(img_path)
         self.img_tmp, resize_scale = resize_to_fit_screen(im0)
         self.modify_images()    
@@ -450,20 +489,34 @@ class Statemachine_ATL:
         print('Current image count:', self.img_count + 1)
         img_path, self.window_name, self.save_img = get_image_path_and_name(self.source, self.img_files, self.img_count, self.store)
         print('Current Image Path: ', img_path)
+        self.img_path = img_path
         im0 = cv2.imread(img_path)
+        self.original_image = copy.deepcopy(im0)
         pred = self.detector.run(im0)
-        self.img_tmp, self.lst = draw_prediction_on_image(pred, im0, self.obj, self.clr)
-        self.img_tmp, resize_scale = resize_to_fit_screen(self.img_tmp)
+        self.img_tmp, self.lst, self.lst_real_coords = draw_prediction_on_image(pred, im0, self.obj, self.clr)
+        self.img_tmp, self.resize_scale = resize_to_fit_screen(self.img_tmp)
+        self.lst_real_coords = [[int(float(item) * self.resize_scale) if index < 4 else item for index, item in enumerate(sublist)] for sublist in self.lst_real_coords]
         cv2.imshow(self.window_name, self.img_tmp)
         action = get_key_action(cv2.waitKey(0))
         self.process_key_input(action)
               
     def process_LPR_label(self):
-        im0 = copy.deepcopy(self.img_tmp)
         lst_obj = []
+        if self.original_image is not None:
+            self.img_tmp = copy.deepcopy(self.original_image)
+            self.img_tmp, self.resize_scale = resize_to_fit_screen(self.img_tmp)
+        im0 = copy.deepcopy(self.img_tmp)
         lst_a = [[], self.img_tmp, lst_obj, 0, self.window_name, 'LPR']
+        
+        if self.lst_real_coords is not None:
+            lst_a[0].extend(item[:4] for item in self.lst_real_coords)
+            lst_a[2].extend(item[4] for item in self.lst_real_coords)
+            for i , coord in enumerate(lst_a[0]):
+                cv2.rectangle(self.img_tmp, (coord[0], coord[1]), (coord[2], coord[3]), (clr[lst_a[2][i]]), 2)
+            
         cv2.imshow(self.window_name, self.img_tmp)
         cv2.setMouseCallback(self.window_name, show_xy_combined, lst_a)
+        count2 = 0
         while True:
             key = cv2.waitKey(0)
             action = get_key_action(key)
@@ -474,7 +527,7 @@ class Statemachine_ATL:
                     lst_a[2] = get_plate_string()
                     lst_a[0] = sorted(lst_a[0], key=lambda x: x[0])
                     lst = process_image_annotations(lst_a)
-                    save_labels_to_file(lst, self.save_img)
+                    save_labels_to_file(lst, self.save_img, self.img_path, self.images_store)
                     self.img_count += 1
                     cv2.destroyAllWindows()
                     break
@@ -491,9 +544,17 @@ class Statemachine_ATL:
                 self.img_count = max(0, self.img_count)
                 cv2.destroyAllWindows()
                 break
+            elif action == 'switch_next_bbox' and lst_a[0]:
+                count2 += 1
+                count2, self.selected_bbox = update_selected_bbox(lst_a, obj, count2, self.window_name, mode='LPR')
+            
             elif action == 'delete':
                 lst_a[1] = copy.deepcopy(im0)
-                self.img_tmp = handle_delete_buttom_up(lst_a)
+                if self.selected_bbox is not None:
+                    self.img_tmp = handle_delete_single_bbox(lst_a, self.selected_bbox, mode='LPR')
+                    self.selected_bbox = None
+                else:
+                    self.img_tmp = handle_delete_buttom_up(lst_a)
                 cv2.imshow(self.window_name, self.img_tmp)
             else:
                 print('Input error. Please re-enter.')
@@ -502,6 +563,7 @@ class Statemachine_ATL:
         print('Current image count:', self.img_count + 1)
         img_path, self.window_name, self.save_img = get_image_path_and_name(self.source, self.img_files, self.img_count, self.store)
         print('Current Image Path: ', img_path)
+        self.img_path = img_path
         im0 = cv2.imread(img_path)
         self.img_tmp, self.resize_scale = resize_to_fit_screen(im0)
         self.process_LPR_label()
@@ -510,6 +572,7 @@ class Statemachine_ATL:
         print('Current image count:', self.img_count)
         image_path, self.window_name, self.save_img = get_image_path_and_name(self.source, self.img_files, self.img_count, self.store)
         print('Current Image Path: ', image_path)
+        self.img_path = image_path
         im0 = cv2.imread(image_path)
         self.img_tmp = copy.deepcopy(im0)
         self.modify_images_obb()
@@ -546,6 +609,8 @@ if __name__ == '__main__':
     parser.add_argument('--store', type=str, default='./dataset/labels/', help='store')
     parser.add_argument('--device', default='0', help='device id (i.e. 0 or 0,1) or cpu')
     parser.add_argument('--line_thickness', type=int, default=3, help='bounding box thickness (pixels)')
+    parser.add_argument('--images_store', type=str, default='./dataset/new_images/', help='store labeled images')
+    
     
     args = parser.parse_args()
     
@@ -566,6 +631,7 @@ if __name__ == '__main__':
                 last_time_num=args.last_time_num,
                 weights=args.weights,
                 source=args.source,
+                images_store=args.images_store,
                 imagesz=tuple(args.imagesz),
                 conf_thres=args.conf_thres,
                 iou_thres=args.iou_thres,
